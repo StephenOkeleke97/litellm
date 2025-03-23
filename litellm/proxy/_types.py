@@ -588,6 +588,7 @@ class GenerateRequestBase(LiteLLMPydanticObjectBase):
     max_budget: Optional[float] = None
     user_id: Optional[str] = None
     team_id: Optional[str] = None
+    organization_id: Optional[str] = None
     max_parallel_requests: Optional[int] = None
     metadata: Optional[dict] = {}
     tpm_limit: Optional[int] = None
@@ -712,6 +713,9 @@ class LiteLLM_ProxyModelTable(LiteLLMPydanticObjectBase):
     model_info: dict
     created_by: str
     updated_by: str
+    organization_id: str
+    teams: List[str]
+    users: List[str]
 
     @model_validator(mode="before")
     @classmethod
@@ -1429,6 +1433,7 @@ class LiteLLM_VerificationToken(LiteLLMPydanticObjectBase):
     config: Dict = {}
     user_id: Optional[str] = None
     team_id: Optional[str] = None
+    organization_id: Optional[str] = None
     max_parallel_requests: Optional[int] = None
     metadata: Dict = {}
     tpm_limit: Optional[int] = None

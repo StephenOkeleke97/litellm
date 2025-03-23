@@ -51,6 +51,10 @@ model LiteLLM_ProxyModelTable {
   created_by String
   updated_at    DateTime               @default(now()) @updatedAt @map("updated_at")
   updated_by String
+  organization_id  String
+  teams  LiteLLM_TeamTable[]  
+  users  LiteLLM_UserTable[]  
+  organization LiteLLM_OrganizationTable @relation(fields: [organization_id], references: [organization_id])
 }
 
 model LiteLLM_OrganizationTable {
@@ -70,6 +74,7 @@ model LiteLLM_OrganizationTable {
     users LiteLLM_UserTable[]
     keys LiteLLM_VerificationToken[]
     members LiteLLM_OrganizationMembership[] @relation("OrganizationToMembership")
+    proxy_models LiteLLM_ProxyModelTable[]
 }
 
 // Model info for teams, just has model aliases for now.
@@ -109,6 +114,7 @@ model LiteLLM_TeamTable {
     model_id Int? @unique // id for LiteLLM_ModelTable -> stores team-level model aliases
     litellm_organization_table LiteLLM_OrganizationTable?   @relation(fields: [organization_id], references: [organization_id])
     litellm_model_table LiteLLM_ModelTable? @relation(fields: [model_id], references: [id])
+    proxy_models LiteLLM_ProxyModelTable[]
 }
 
 // Track spend, rate limit, budget Users
@@ -143,6 +149,7 @@ model LiteLLM_UserTable {
     invitations_created LiteLLM_InvitationLink[] @relation("CreatedBy")
     invitations_updated LiteLLM_InvitationLink[] @relation("UpdatedBy")
     invitations_user    LiteLLM_InvitationLink[] @relation("UserId")
+    proxy_models LiteLLM_ProxyModelTable[]
 }
 
 // Generate Tokens for Proxy

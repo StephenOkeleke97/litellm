@@ -255,6 +255,8 @@ async def _add_model_to_db(
     }
     if model_params.model_info.id is not None:
         _data["model_id"] = model_params.model_info.id
+    if model_params.model_info.org_id is not None:
+        _data["organization_id"] = model_params.model_info.org_id
     if should_create_model_in_db:
         model_response = await prisma_client.db.litellm_proxymodeltable.create(
             data=_data  # type: ignore
@@ -316,6 +318,37 @@ async def _add_team_model_to_db(
 
     return model_response
 
+async def _add_org_model_to_db(
+    model_params: Deployment,
+    user_api_key_dict: UserAPIKeyAuth,
+    prisma_client: PrismaClient,
+) -> Optional[LiteLLM_ProxyModelTable]:
+    """
+    If 'org_id' is provided,
+
+    - generate a unique 'model_name' for the model (e.g. 'model_name_{org_id}_{uuid})
+    - store the model in the db with the unique 'model_name'
+    - store a team model alias mapping {"model_name": "model_name_{team_id}_{uuid}"}
+    """
+    _org_id = model_params.model_info.org_id
+    if _org_id is None:
+        return None
+    original_model_name = model_params.model_name
+    if original_model_name:
+        model_params.model_info.org_public_model_name = original_model_name
+
+    unique_model_name = f"model_name_{_org_id}_{uuid.uuid4()}"
+
+    model_params.model_name = unique_model_name
+
+    ## CREATE MODEL IN DB ##
+    model_response = await _add_model_to_db(
+        model_params=model_params,
+        user_api_key_dict=user_api_key_dict,
+        prisma_client=prisma_client,
+    )
+    return model_response
+
 
 def check_if_team_id_matches_key(
     team_id: Optional[str], user_api_key_dict: UserAPIKeyAuth
@@ -331,6 +364,23 @@ def check_if_team_id_matches_key(
             can_make_call = False
     else:
         if user_api_key_dict.team_id != team_id:
+            can_make_call = False
+    return can_make_call
+
+def check_if_org_id_matches_key(
+    org_id: Optional[str], user_api_key_dict: UserAPIKeyAuth
+) -> bool:
+    can_make_call = True
+    if (
+        user_api_key_dict.user_role
+        and user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN
+    ):
+        return True
+    if org_id is None:
+        if user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN:
+            can_make_call = False
+    else:
+        if user_api_key_dict.organization_id != org_id:
             can_make_call = False
     return can_make_call
 
@@ -464,14 +514,9 @@ async def add_new_model(
                 },
             )
 
-        if model_params.model_info.team_id is not None and premium_user is not True:
-            raise HTTPException(
-                status_code=403,
-                detail={"error": CommonProxyErrors.not_premium_user.value},
-            )
 
-        if not check_if_team_id_matches_key(
-            team_id=model_params.model_info.team_id, user_api_key_dict=user_api_key_dict
+        if not check_if_org_id_matches_key(
+            org_id=model_params.model_info.org_id, user_api_key_dict=user_api_key_dict
         ):
             raise HTTPException(
                 status_code=403,
@@ -488,14 +533,14 @@ async def add_new_model(
 
             try:
                 _original_litellm_model_name = model_params.model_name
-                if model_params.model_info.team_id is None:
+                if model_params.model_info.org_id is None:
                     model_response = await _add_model_to_db(
                         model_params=model_params,
                         user_api_key_dict=user_api_key_dict,
                         prisma_client=prisma_client,
                     )
                 else:
-                    model_response = await _add_team_model_to_db(
+                    model_response = await _add_org_model_to_db(
                         model_params=model_params,
                         user_api_key_dict=user_api_key_dict,
                         prisma_client=prisma_client,

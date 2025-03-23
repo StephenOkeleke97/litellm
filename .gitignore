@@ -83,3 +83,5 @@ litellm/proxy/migrations/0_init/migration.sql
 litellm/proxy/db/migrations/0_init/migration.sql
 litellm/proxy/db/migrations/*
 litellm/proxy/migrations/*
+
+.vscode

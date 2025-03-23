@@ -1,3 +1,6 @@
+# import debugpy
+# debugpy.listen(("0.0.0.0", 5678))
+# debugpy.wait_for_client()
 import asyncio
 import copy
 import inspect
@@ -645,7 +648,29 @@ def custom_openapi():
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
-
+async def get_llm_router(user_api_key_dict:
+    UserAPIKeyAuth = Depends(user_api_key_auth)) -> litellm.Router:
+    if prisma_client is None:
+        raise Exception("No DB Connected")
+    org_id = user_api_key_dict.organization_id
+    new_models = []
+    
+    if org_id is not None:
+        new_models = await proxy_config._get_models_from_db_by_org_id(prisma_client=prisma_client, org_id=org_id)
+        
+    _model_list: list = proxy_config.decrypt_model_list_from_db(
+            new_models=new_models
+        )
+ 
+    llm_router = litellm.Router(
+        model_list=_model_list,
+        router_general_settings=RouterGeneralSettings(
+            async_only_mode=True  # only init async clients
+        )
+    )
+ 
+    return llm_router
+    
 if os.getenv("DOCS_FILTERED", "False") == "True" and premium_user:
     app.openapi = custom_openapi  # type: ignore
 
@@ -2759,6 +2784,25 @@ class ProxyConfig:
             new_models = []
 
         return new_models
+    
+    async def _get_models_from_db_by_org_id(self, prisma_client: PrismaClient, org_id: str) -> list:
+        try:
+            new_models = await prisma_client.db.litellm_proxymodeltable.find_many(
+                where={"organization_id": org_id},
+                include={
+                    "teams": True,
+                    "users": True
+                }
+            )
+        except Exception as e:
+            verbose_proxy_logger.exception(
+                "litellm.proxy_server.py::add_deployment() - Error getting new models from DB - {}".format(
+                    str(e)
+                )
+            )
+            new_models = []
+
+        return new_models
 
     async def add_deployment(
         self,
@@ -3402,7 +3446,9 @@ class ProxyStartupEvent:
     "/models", dependencies=[Depends(user_api_key_auth)], tags=["model management"]
 )  # if project requires model list
 async def model_list(
+    request: Request,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
     return_wildcard_routes: Optional[bool] = False,
     team_id: Optional[str] = None,
 ):
@@ -3411,42 +3457,22 @@ async def model_list(
 
     This is just for compatibility with openai projects like aider.
     """
-    global llm_model_list, general_settings, llm_router, prisma_client, user_api_key_cache, proxy_logging_obj
+    global llm_model_list, general_settings, prisma_client, user_api_key_cache, proxy_logging_obj
     all_models = []
     model_access_groups: Dict[str, List[str]] = defaultdict(list)
     ## CHECK IF MODEL RESTRICTIONS ARE SET AT KEY/TEAM LEVEL ##
-    if llm_router is None:
-        proxy_model_list = []
-    else:
-        proxy_model_list = llm_router.get_model_names()
-        model_access_groups = llm_router.get_model_access_groups()
+    proxy_model_list = llm_router.get_model_names()
+    model_access_groups = llm_router.get_model_access_groups()
     key_models = get_key_models(
         user_api_key_dict=user_api_key_dict,
         proxy_model_list=proxy_model_list,
         model_access_groups=model_access_groups,
     )
 
-    team_models: List[str] = user_api_key_dict.team_models
-
-    if team_id:
-        team_object = await get_team_object(
-            team_id=team_id,
-            prisma_client=prisma_client,
-            user_api_key_cache=user_api_key_cache,
-            proxy_logging_obj=proxy_logging_obj,
-        )
-        validate_membership(user_api_key_dict=user_api_key_dict, team_table=team_object)
-        team_models = team_object.models
-
-    team_models = get_team_models(
-        team_models=team_models,
-        proxy_model_list=proxy_model_list,
-        model_access_groups=model_access_groups,
-    )
 
     all_models = get_complete_model_list(
-        key_models=key_models if not team_models else [],
-        team_models=team_models,
+        key_models=key_models,
+        team_models=[],
         proxy_model_list=proxy_model_list,
         user_model=user_model,
         infer_model_from_keys=general_settings.get("infer_model_from_keys", False),
@@ -3502,6 +3528,7 @@ async def chat_completion(  # noqa: PLR0915
     fastapi_response: Response,
     model: Optional[str] = None,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
 

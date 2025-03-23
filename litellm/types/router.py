@@ -114,9 +114,10 @@ class ModelInfo(BaseModel):
     """
     # the team id that this model belongs to
     team_id: Optional[str] = None
-
+    org_id: Optional[str] = None
     # the model_name that can be used by the team when making LLM calls
     team_public_model_name: Optional[str] = None
+    org_public_model_name: Optional[str] = None
 
     def __init__(self, id: Optional[Union[str, int]] = None, **params):
         if id is None:

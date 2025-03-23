@@ -5,7 +5,7 @@ services:
       context: .
       args:
         target: runtime
-    image: ghcr.io/berriai/litellm:main-stable
+    # image: ghcr.io/berriai/litellm:main-stable
     #########################################
     ## Uncomment these lines to start proxy with a config.yaml file ##
     # volumes:
@@ -15,6 +15,7 @@ services:
     ##############################################
     ports:
       - "4000:4000" # Map the container port to the host, change the host port if necessary
+      - "5678:5678"
     environment:
         DATABASE_URL: "postgresql://llmproxy:dbpassword9090@db:5432/litellm"
         STORE_MODEL_IN_DB: "True" # allows adding models to proxy via UI

@@ -334,6 +334,7 @@ async def new_user(
             user_alias=response.get("user_alias", None),
             teams=response.get("teams", None),
             team_id=response.get("team_id", None),
+            organization_id=response.get("organization_id", None),
             metadata=response.get("metadata", None),
             models=response.get("models", None),
             tpm_limit=response.get("tpm_limit", None),

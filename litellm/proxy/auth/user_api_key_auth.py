@@ -1204,6 +1204,7 @@ async def _return_user_api_key_auth_obj(
     start_time: datetime,
     user_role: Optional[LitellmUserRoles] = None,
 ) -> UserAPIKeyAuth:
+    from litellm.proxy.proxy_server import prisma_client
     end_time = datetime.now()
 
     asyncio.create_task(
@@ -1233,6 +1234,13 @@ async def _return_user_api_key_auth_obj(
             user_rpm_limit=user_obj.rpm_limit,
             user_email=user_obj.user_email,
         )
+    user_id = user_api_key_kwargs['user_id']
+    if prisma_client is not None and user_id is not None:
+        user_model = await prisma_client.db.litellm_usertable.find_unique(
+            where={"user_id": user_id}
+        )
+        if user_model is not None:
+            user_api_key_kwargs['organization_id'] = user_model.organization_id
     if user_obj is not None and _is_user_proxy_admin(user_obj=user_obj):
         user_api_key_kwargs.update(
             user_role=LitellmUserRoles.PROXY_ADMIN,
