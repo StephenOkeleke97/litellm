@@ -3644,6 +3644,7 @@ async def completion(  # noqa: PLR0915
     fastapi_response: Response,
     model: Optional[str] = None,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Follows the exact same API spec as `OpenAI's Completions API https://platform.openai.com/docs/api-reference/completions`
@@ -3865,6 +3866,7 @@ async def embeddings(  # noqa: PLR0915
     fastapi_response: Response,
     model: Optional[str] = None,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Follows the exact same API spec as `OpenAI's Embeddings API https://platform.openai.com/docs/api-reference/embeddings`
@@ -4062,6 +4064,7 @@ async def image_generation(
     request: Request,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     global proxy_logging_obj
     data = {}
@@ -4180,6 +4183,7 @@ async def audio_speech(
     request: Request,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Same params as:
@@ -4292,6 +4296,7 @@ async def audio_transcriptions(
     fastapi_response: Response,
     file: UploadFile = File(...),
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Same params as:
@@ -4444,6 +4449,7 @@ async def websocket_endpoint(
     websocket: WebSocket,
     model: str,
     user_api_key_dict=Depends(user_api_key_auth_websocket),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     import websockets
 
@@ -4494,6 +4500,7 @@ async def get_assistants(
     request: Request,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Returns a list of assistants.
@@ -4592,6 +4599,7 @@ async def create_assistant(
     request: Request,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Create assistant
@@ -4691,6 +4699,7 @@ async def delete_assistant(
     assistant_id: str,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Delete assistant
@@ -4787,6 +4796,7 @@ async def create_threads(
     request: Request,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Create a thread.
@@ -4885,6 +4895,7 @@ async def get_thread(
     thread_id: str,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Retrieves a thread.
@@ -4981,6 +4992,7 @@ async def add_messages(
     thread_id: str,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Create a message.
@@ -5080,6 +5092,7 @@ async def get_messages(
     thread_id: str,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Returns a list of messages for a given thread.
@@ -5175,6 +5188,7 @@ async def run_thread(
     thread_id: str,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Create a run.
@@ -5285,6 +5299,7 @@ async def moderations(
     request: Request,
     fastapi_response: Response,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     The moderations endpoint is a tool you can use to check whether content complies with an LLM Providers policies.
@@ -5407,11 +5422,9 @@ async def moderations(
     dependencies=[Depends(user_api_key_auth)],
     response_model=TokenCountResponse,
 )
-async def token_counter(request: TokenCountRequest):
+async def token_counter(request: TokenCountRequest, llm_router: litellm.Router = Depends(get_llm_router)):
     """ """
     from litellm import token_counter
-
-    global llm_router
 
     prompt = request.prompt
     messages = request.messages
@@ -5523,11 +5536,12 @@ async def model_info_v2(
         None, description="Specify the model name (optional)"
     ),
     debug: Optional[bool] = False,
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     BETA ENDPOINT. Might change unexpectedly. Use `/v1/model/info` for now.
     """
-    global llm_model_list, general_settings, user_config_file_path, proxy_config, llm_router
+    global llm_model_list, general_settings, user_config_file_path, proxy_config
 
     if llm_router is None:
         raise HTTPException(
@@ -5624,8 +5638,9 @@ async def model_streaming_metrics(
     _selected_model_group: Optional[str] = None,
     startTime: Optional[datetime] = None,
     endTime: Optional[datetime] = None,
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
-    global prisma_client, llm_router
+    global prisma_client
     if prisma_client is None:
         raise ProxyException(
             message=CommonProxyErrors.db_not_connected_error.value,
@@ -5758,8 +5773,9 @@ async def model_metrics(
     endTime: Optional[datetime] = None,
     api_key: Optional[str] = None,
     customer: Optional[str] = None,
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
-    global prisma_client, llm_router
+    global prisma_client
     if prisma_client is None:
         raise ProxyException(
             message="Prisma Client is not initialized",
@@ -5873,8 +5889,9 @@ async def model_metrics_slow_responses(
     endTime: Optional[datetime] = None,
     api_key: Optional[str] = None,
     customer: Optional[str] = None,
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
-    global prisma_client, llm_router, proxy_logging_obj
+    global prisma_client, proxy_logging_obj
     if prisma_client is None:
         raise ProxyException(
             message="Prisma Client is not initialized",
@@ -5962,8 +5979,9 @@ async def model_metrics_exceptions(
     endTime: Optional[datetime] = None,
     api_key: Optional[str] = None,
     customer: Optional[str] = None,
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
-    global prisma_client, llm_router
+    global prisma_client
     if prisma_client is None:
         raise ProxyException(
             message="Prisma Client is not initialized",
@@ -6090,6 +6108,7 @@ def _get_proxy_model_info(model: dict) -> dict:
 async def model_info_v1(  # noqa: PLR0915
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
     litellm_model_id: Optional[str] = None,
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Provides more info about each model in /models, including config.yaml descriptions (except api key and api base)
@@ -6123,7 +6142,7 @@ async def model_info_v1(  # noqa: PLR0915
 
     ```
     """
-    global llm_model_list, general_settings, user_config_file_path, proxy_config, llm_router, user_model
+    global llm_model_list, general_settings, user_config_file_path, proxy_config, user_model
 
     if user_model is not None:
         # user is trying to get specific model from litellm router
@@ -6241,6 +6260,7 @@ def _get_model_group_info(
 async def model_group_info(
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
     model_group: Optional[str] = None,
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     """
     Get information about all the deployments on litellm proxy, including config.yaml descriptions (except api key and api base)
@@ -6392,7 +6412,7 @@ async def model_group_info(
             }
     ```
     """
-    global llm_model_list, general_settings, user_config_file_path, proxy_config, llm_router
+    global llm_model_list, general_settings, user_config_file_path, proxy_config
 
     if llm_model_list is None:
         raise HTTPException(
@@ -6590,6 +6610,7 @@ async def async_queue_request(
     fastapi_response: Response,
     model: Optional[str] = None,
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router),
 ):
     global general_settings, user_debug, proxy_logging_obj
     """
@@ -7404,13 +7425,13 @@ async def invitation_delete(
     dependencies=[Depends(user_api_key_auth)],
     include_in_schema=False,
 )
-async def update_config(config_info: ConfigYAML):  # noqa: PLR0915
+async def update_config(config_info: ConfigYAML, llm_router: litellm.Router = Depends(get_llm_router)):  # noqa: PLR0915
     """
     For Admin UI - allows admin to update config via UI
 
     Currently supports modifying General Settings + LiteLLM settings
     """
-    global llm_router, llm_model_list, general_settings, proxy_config, proxy_logging_obj, master_key, prisma_client
+    global llm_model_list, general_settings, proxy_config, proxy_logging_obj, master_key, prisma_client
     try:
         import base64
 
@@ -7907,13 +7928,13 @@ async def delete_config_general_settings(
     include_in_schema=False,
     dependencies=[Depends(user_api_key_auth)],
 )
-async def get_config():  # noqa: PLR0915
+async def get_config(llm_router: litellm.Router = Depends(get_llm_router)):  # noqa: PLR0915
     """
     For Admin UI - allows admin to view config via UI
     # return the callbacks and the env variables for the callback
 
     """
-    global llm_router, llm_model_list, general_settings, proxy_config, proxy_logging_obj, master_key
+    global llm_model_list, general_settings, proxy_config, proxy_logging_obj, master_key
     try:
         import base64
 
