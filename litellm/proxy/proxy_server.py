@@ -1,6 +1,7 @@
 # import debugpy
 # debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()
+# debugpy.breakpoint()
 import asyncio
 import copy
 import inspect
@@ -212,7 +213,6 @@ from litellm.proxy.management_endpoints.key_management_endpoints import (
 )
 from litellm.proxy.management_endpoints.model_management_endpoints import (
     _add_model_to_db,
-    _add_team_model_to_db,
     check_if_team_id_matches_key,
 )
 from litellm.proxy.management_endpoints.model_management_endpoints import (
@@ -344,6 +344,7 @@ from fastapi.routing import APIRouter
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
+from .proxy_prisma_initialize import initialize_defaults
 
 # import enterprise folder
 try:
@@ -462,6 +463,8 @@ async def proxy_startup_event(app: FastAPI):
             proxy_logging_obj=proxy_logging_obj,
             user_api_key_cache=user_api_key_cache,
         )
+        
+    await initialize_defaults(prisma_client)
 
     ## CHECK PREMIUM USER
     verbose_proxy_logger.debug(
@@ -657,6 +660,9 @@ async def get_llm_router(user_api_key_dict:
     
     if org_id is not None:
         new_models = await proxy_config._get_models_from_db_by_org_id(prisma_client=prisma_client, org_id=org_id)
+        
+    system_models = await proxy_config._get_models_from_db_by_org_id(prisma_client=prisma_client, org_id=os.environ.get("SYSTEM_ID", ""))
+    new_models.extend(system_models)
         
     _model_list: list = proxy_config.decrypt_model_list_from_db(
             new_models=new_models

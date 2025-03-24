@@ -17,6 +17,7 @@ from typing import Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
+from typing import List, Any
 
 from litellm._logging import verbose_proxy_logger
 from litellm.constants import LITELLM_PROXY_ADMIN_NAME
@@ -265,59 +266,6 @@ async def _add_model_to_db(
         model_response = LiteLLM_ProxyModelTable(**_data)
     return model_response
 
-
-async def _add_team_model_to_db(
-    model_params: Deployment,
-    user_api_key_dict: UserAPIKeyAuth,
-    prisma_client: PrismaClient,
-) -> Optional[LiteLLM_ProxyModelTable]:
-    """
-    If 'team_id' is provided,
-
-    - generate a unique 'model_name' for the model (e.g. 'model_name_{team_id}_{uuid})
-    - store the model in the db with the unique 'model_name'
-    - store a team model alias mapping {"model_name": "model_name_{team_id}_{uuid}"}
-    """
-    _team_id = model_params.model_info.team_id
-    if _team_id is None:
-        return None
-    original_model_name = model_params.model_name
-    if original_model_name:
-        model_params.model_info.team_public_model_name = original_model_name
-
-    unique_model_name = f"model_name_{_team_id}_{uuid.uuid4()}"
-
-    model_params.model_name = unique_model_name
-
-    ## CREATE MODEL IN DB ##
-    model_response = await _add_model_to_db(
-        model_params=model_params,
-        user_api_key_dict=user_api_key_dict,
-        prisma_client=prisma_client,
-    )
-
-    ## CREATE MODEL ALIAS IN DB ##
-    await update_team(
-        data=UpdateTeamRequest(
-            team_id=_team_id,
-            model_aliases={original_model_name: unique_model_name},
-        ),
-        user_api_key_dict=user_api_key_dict,
-        http_request=Request(scope={"type": "http"}),
-    )
-
-    # add model to team object
-    await team_model_add(
-        data=TeamModelAddRequest(
-            team_id=_team_id,
-            models=[original_model_name],
-        ),
-        http_request=Request(scope={"type": "http"}),
-        user_api_key_dict=user_api_key_dict,
-    )
-
-    return model_response
-
 async def _add_org_model_to_db(
     model_params: Deployment,
     user_api_key_dict: UserAPIKeyAuth,
@@ -333,14 +281,7 @@ async def _add_org_model_to_db(
     _org_id = model_params.model_info.org_id
     if _org_id is None:
         return None
-    original_model_name = model_params.model_name
-    if original_model_name:
-        model_params.model_info.org_public_model_name = original_model_name
-
-    unique_model_name = f"model_name_{_org_id}_{uuid.uuid4()}"
-
-    model_params.model_name = unique_model_name
-
+    
     ## CREATE MODEL IN DB ##
     model_response = await _add_model_to_db(
         model_params=model_params,
@@ -348,6 +289,63 @@ async def _add_org_model_to_db(
         prisma_client=prisma_client,
     )
     return model_response
+
+async def _add_models_to_db(
+    model_params_list: List[Deployment],
+    user_api_key_dict: UserAPIKeyAuth,
+    prisma_client: PrismaClient,
+    new_encryption_key: Optional[str] = None,
+    should_create_model_in_db: bool = True,
+    transaction: Optional[Any] = None,
+) -> List[Optional[LiteLLM_ProxyModelTable]]:
+    """
+    Efficiently adds an array of model parameters to the database using batch insert (createMany).
+    Uses a transaction if provided, otherwise uses the Prisma client directly.
+    """
+    batch_data = []
+
+    for model_params in model_params_list:
+        _litellm_params_dict = model_params.litellm_params.dict(exclude_none=True)
+        for k, v in _litellm_params_dict.items():
+            encrypted_value = encrypt_value_helper(
+                value=v, new_encryption_key=new_encryption_key
+            )
+            model_params.litellm_params[k] = encrypted_value
+
+        _data = {
+            "model_id": model_params.model_info.id,
+            "model_name": model_params.model_name,
+            "litellm_params": model_params.litellm_params.model_dump_json(exclude_none=True),  # type: ignore
+            "model_info": model_params.model_info.model_dump_json(exclude_none=True),  # type: ignore
+            "created_by": user_api_key_dict.user_id or LITELLM_PROXY_ADMIN_NAME,
+            "updated_by": user_api_key_dict.user_id or LITELLM_PROXY_ADMIN_NAME,
+        }
+
+        if model_params.model_info.id is not None:
+            _data["model_id"] = model_params.model_info.id
+        if model_params.model_info.org_id is not None:
+            _data["organization_id"] = model_params.model_info.org_id
+
+        batch_data.append(_data)
+
+    if should_create_model_in_db:
+        try:
+            # If a transaction is provided, use it; otherwise, use the Prisma client
+            db = transaction if transaction else prisma_client.db
+            model_responses = await db.litellm_proxymodeltable.create_many(
+                data=batch_data  # type: ignore
+            )
+            return model_responses
+        except Exception as e:
+            raise ProxyException(
+                message=f"Error updating model: {str(e)}",
+                type=ProxyErrorTypes.internal_server_error,
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                param=None,
+            )
+    else:
+        return [LiteLLM_ProxyModelTable(**_data) for _data in batch_data]
+
 
 
 def check_if_team_id_matches_key(
@@ -617,8 +615,7 @@ async def add_new_model(
             param=getattr(e, "param", "None"),
             code=status.HTTP_400_BAD_REQUEST,
         )
-
-
+ 
 #### MODEL MANAGEMENT ####
 @router.post(
     "/model/update",
