@@ -263,6 +263,9 @@ class LiteLLMRoutes(enum.Enum):
         "/v1/responses/{response_id}",
         "/responses/{response_id}/input_items",
         "/v1/responses/{response_id}/input_items",
+        # omniGPT API custom routes
+        "/conversations/{conversation_id}/messages/",
+        "/conversations/"
     ]
 
     mapped_pass_through_routes = [

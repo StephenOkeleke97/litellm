@@ -345,6 +345,10 @@ from fastapi.security import OAuth2PasswordBearer
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from .proxy_prisma_initialize import initialize_defaults
+from litellm.types.conversation import ConversationCreate
+from litellm.utils import Choices
+from collections import deque
+from litellm.utils import get_max_tokens
 
 # import enterprise folder
 try:
@@ -6597,7 +6601,236 @@ async def alerting_settings(
             return_val.append(_response_obj)
     return return_val
 
+async def get_conversation_by_id(conversation_id: str, prisma_client: PrismaClient):
+    conversation = await prisma_client.db.conversation.find_unique(where={"conversation_id": conversation_id})
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation
 
+async def get_messages_for_conversation(conversation_id: str, prisma_client: PrismaClient):
+    messages = await prisma_client.db.conversationmessage.find_many(where={"conversation_id": conversation_id}, order={"created_at": "asc"})
+    return messages
+
+async def prepare_messages_for_model(body, conversation_id, prisma_client, model):
+    context_messages = await prisma_client.db.conversationmessage.find_many(
+        where={"conversation_id": conversation_id}, order={"created_at": "asc"}
+    )
+    messages = body.get('messages', [])
+
+    mapped_context_messages = deque()
+    for context_message in context_messages:
+        mapped_context_messages.append({
+            "role": context_message.sender_role,
+            "content": context_message.content
+        })
+
+    for message in messages:
+        mapped_context_messages.append({
+            "role": message.get("role", "user"),
+            "content": message.get("content", "")
+        })
+
+    max_tokens = get_max_tokens(model)
+    if max_tokens is None:
+        raise Exception(
+            f"Could not calculate max_tokens for model {model}."
+        )
+        
+    from litellm.utils import token_counter
+    prompt_tokens = token_counter(model=model, messages=list(mapped_context_messages))
+
+    while prompt_tokens > max_tokens:
+        mapped_context_messages.popleft()
+        prompt_tokens = token_counter(model=model, messages=list(mapped_context_messages))
+
+    return list(mapped_context_messages)
+
+async def save_conversation(prisma_client: PrismaClient, 
+                            conversation_id: str,
+                            content: str,
+                            sender_role: str,
+                            transaction: Optional[Any] = None):
+    conversation_data = {
+        "conversation_id": conversation_id,
+        "sender_role": sender_role,
+        "content": content
+    }
+    db = transaction if transaction else prisma_client.db
+    await db.conversationmessage.create(data=conversation_data)
+
+async def save_and_stream_conversation_to_db(response: Optional[StreamingResponse], 
+                                             conversation_id: str, 
+                                             prisma_client: PrismaClient,
+                                             transaction: Optional[Any] = None,):
+    if response:
+        accumulated_content = ""
+        role = ""
+        async for chunk in response.body_iterator:
+            try:
+                json_string = str(chunk).strip().lstrip('data: ')
+                data = json.loads(json_string)
+                choices = data.get('choices', [])
+                for choice in choices:
+                    message = choice.get('delta', {}).get('content', '')
+                    if not role:
+                        role = choice.get('delta', {}).get('role', '')
+                    if message:
+                        accumulated_content += message
+            except Exception as e:
+                print("Error during stream deserialization. " + str(e))
+          
+            yield chunk
+            
+        if accumulated_content:
+            await save_conversation(prisma_client, conversation_id, accumulated_content, role or "assistant")
+    
+async def save_model_conversation_to_db(response: ModelResponse, 
+                                        conversation_id: str,
+                                        prisma_client: PrismaClient,
+                                        transaction: Optional[Any] = None,):
+    for choice in response.choices:
+        if isinstance(choice, Choices) and choice.message:
+            content = choice.message.content
+            role = choice.message.role
+            if content:
+                await save_conversation(prisma_client, conversation_id, content, role, transaction)
+                
+    return response
+
+async def save_conversation_to_db(response: StreamingResponse | ModelResponse | Any, 
+                                  conversation_id: str,
+                                  prisma_client: PrismaClient,
+                                  transaction: Optional[Any] = None,):
+    if isinstance(response, StreamingResponse):
+        return StreamingResponse(
+            save_and_stream_conversation_to_db(response, conversation_id, prisma_client, transaction),
+            media_type="application/json"
+        )
+    elif isinstance(response, ModelResponse):
+        return await save_model_conversation_to_db(response, conversation_id, prisma_client, transaction)
+    else:
+        return response
+    
+def get_model(llm_router: litellm.Router, model_id: str):
+    for model in llm_router.model_list:
+        if model.get('model_info', {}).get('id') == model_id:
+            return model
+    return None  
+
+
+def get_modified_request(request: Request, new_body: Dict):
+    scope = copy.copy(request.scope)
+    scope['parsed_body'] = new_body
+    new_request = Request(scope=scope, receive=request._receive, send=request._send)
+    return new_request
+
+@router.post(
+    "/conversations/",
+    dependencies=[Depends(user_api_key_auth)],
+    tags=["/conversations/"],
+)
+async def create_conversation(conversation: ConversationCreate, 
+                              user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+                              llm_router: litellm.Router = Depends(get_llm_router)):
+    global prisma_client
+
+    if prisma_client is None:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": CommonProxyErrors.db_not_connected_error.value},
+        )
+        
+    if user_api_key_dict.user_id is None:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Unable to identify user id. Received={}".format(
+                    user_api_key_dict.user_id
+                )
+            },
+        )
+    
+    model = get_model(llm_router, conversation.model_id)
+    
+    if model is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "User does not have access to model. Received={}".format(
+                    conversation.model_id
+                )
+            },
+        )
+        
+    try:
+        new_conversation = await prisma_client.db.conversation.create(
+            data={
+                "user_id": user_api_key_dict.user_id,
+                "model_id": conversation.model_id,
+                "metadata": json.dumps(conversation.metadata) if conversation.metadata is not None else json.dumps({})
+            }
+        )
+        return new_conversation
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"error": str(e)})
+
+@router.post(
+    "/conversations/{conversation_id}/messages/",
+    dependencies=[Depends(user_api_key_auth)],
+    tags=["/conversations/{conversation_id}/messages/"],
+)
+async def create_message(  
+    request: Request,
+    fastapi_response: Response,
+    conversation_id: str,
+    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+    llm_router: litellm.Router = Depends(get_llm_router)):
+    
+    global prisma_client
+
+    if prisma_client is None:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": CommonProxyErrors.db_not_connected_error.value},
+        )
+    
+    conversation = await get_conversation_by_id(conversation_id, prisma_client)
+    model = get_model(llm_router, conversation.model_id)
+    if model is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "User does not have access to model. Received={}".format(
+                    conversation.model_id
+                )
+            },
+        )
+    
+    model_name = model.get('model_name', '')
+    
+    try:
+        body = await request.json()
+        original_messages = body.get('messages', [])
+        messages = await prepare_messages_for_model(body, conversation_id, prisma_client, model_name)
+        body['messages'] = messages
+        body['model'] = model_name
+        new_request = get_modified_request(request=request, new_body=body)
+        response = await chat_completion(
+                request=new_request,
+                fastapi_response=fastapi_response,
+                model=None,
+                user_api_key_dict=user_api_key_dict,
+                llm_router=llm_router
+            )
+        
+        async with prisma_client.db.tx(timeout=timedelta(seconds=60)) as tx:
+            for message in original_messages:
+                await save_conversation(prisma_client, conversation_id, message.get('content', ''), message.get('role', ''), tx)
+            return await save_conversation_to_db(response, conversation_id, prisma_client, tx)
+    except Exception as e:
+        fastapi_response.status_code = 400
+        return {"error": "Invalid JSON body or missing 'messages' field", "details": str(e)}
+    
 #### EXPERIMENTAL QUEUING ####
 @router.post(
     "/queue/chat/completions",

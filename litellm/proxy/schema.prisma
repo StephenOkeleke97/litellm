@@ -53,7 +53,8 @@ model LiteLLM_ProxyModelTable {
   updated_by String
   organization_id  String
   teams  LiteLLM_TeamTable[]  
-  users  LiteLLM_UserTable[]  
+  users  LiteLLM_UserTable[]
+  conversations Conversation[]  
   organization LiteLLM_OrganizationTable @relation(fields: [organization_id], references: [organization_id])
 }
 
@@ -150,6 +151,7 @@ model LiteLLM_UserTable {
     invitations_updated LiteLLM_InvitationLink[] @relation("UpdatedBy")
     invitations_user    LiteLLM_InvitationLink[] @relation("UserId")
     proxy_models LiteLLM_ProxyModelTable[]
+    conversations Conversation[]
 }
 
 // Generate Tokens for Proxy
@@ -319,4 +321,25 @@ model LiteLLM_AuditLog {
   object_id          String      // id of the object being audited. This can be the key id, team id, user id, model id
   before_value       Json?       // value of the row 
   updated_values     Json?       // value of the row after change
+}
+
+model Conversation {
+  conversation_id   String   @id @default(uuid())
+  user_id           String
+  user              LiteLLM_UserTable @relation(fields: [user_id], references: [user_id])
+  model_id          String
+  model             LiteLLM_ProxyModelTable @relation(fields: [model_id], references: [model_id])
+  metadata          Json?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+  messages          ConversationMessage[]
+}
+
+model ConversationMessage {
+  id                String   @id @default(uuid())
+  conversation_id   String
+  sender_role       String   
+  content           String
+  created_at        DateTime  @default(now())
+  conversation      Conversation @relation(fields: [conversation_id], references: [conversation_id])
 }
