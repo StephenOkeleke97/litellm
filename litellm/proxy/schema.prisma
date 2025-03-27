@@ -55,7 +55,7 @@ model LiteLLM_ProxyModelTable {
   teams  LiteLLM_TeamTable[]  
   users  LiteLLM_UserTable[]
   conversations Conversation[]  
-  organization LiteLLM_OrganizationTable @relation(fields: [organization_id], references: [organization_id])
+  organization LiteLLM_OrganizationTable @relation(fields: [organization_id], references: [organization_id], onDelete: Cascade)
 }
 
 model LiteLLM_OrganizationTable {
@@ -124,7 +124,7 @@ model LiteLLM_UserTable {
     user_alias String? 
     team_id    String?
     sso_user_id String? @unique
-    organization_id String?
+    organization_id String
     password  String?
     teams    String[] @default([])
     user_role  String?
@@ -145,7 +145,7 @@ model LiteLLM_UserTable {
     updated_at      DateTime?               @default(now()) @updatedAt @map("updated_at")
 
     // relations
-    litellm_organization_table LiteLLM_OrganizationTable?                   @relation(fields: [organization_id], references: [organization_id])
+    litellm_organization_table LiteLLM_OrganizationTable?                   @relation(fields: [organization_id], references: [organization_id], onDelete: Cascade)
     organization_memberships LiteLLM_OrganizationMembership[]
     invitations_created LiteLLM_InvitationLink[] @relation("CreatedBy")
     invitations_updated LiteLLM_InvitationLink[] @relation("UpdatedBy")
@@ -326,9 +326,9 @@ model LiteLLM_AuditLog {
 model Conversation {
   conversation_id   String   @id @default(uuid())
   user_id           String
-  user              LiteLLM_UserTable @relation(fields: [user_id], references: [user_id])
+  user              LiteLLM_UserTable @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
   model_id          String
-  model             LiteLLM_ProxyModelTable @relation(fields: [model_id], references: [model_id])
+  model             LiteLLM_ProxyModelTable @relation(fields: [model_id], references: [model_id], onDelete: SetNull)
   metadata          Json?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
@@ -341,5 +341,5 @@ model ConversationMessage {
   sender_role       String   
   content           String
   created_at        DateTime  @default(now())
-  conversation      Conversation @relation(fields: [conversation_id], references: [conversation_id])
+  conversation      Conversation @relation(fields: [conversation_id], references: [conversation_id], onDelete: Cascade)
 }

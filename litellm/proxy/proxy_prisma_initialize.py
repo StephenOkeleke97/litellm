@@ -38,6 +38,55 @@ default_models = [
             "api_base": os.environ.get("OPENAI_API_BASE"),
         }
     },
+    
+    # OpenAI Embedding Models
+    {
+        "model_name": "openai/text-embedding-3-small",
+        "litellm_params": {
+            "model": "text-embedding-3-small",
+            "custom_llm_provider": "openai",
+            "api_key": os.environ.get("OPENAI_API_KEY"),
+            "api_base": os.environ.get("OPENAI_API_BASE"),
+        }
+    },
+    {
+        "model_name": "openai/text-embedding-3-large",
+        "litellm_params": {
+            "model": "text-embedding-3-large",
+            "custom_llm_provider": "openai",
+            "api_key": os.environ.get("OPENAI_API_KEY"),
+            "api_base": os.environ.get("OPENAI_API_BASE"),
+        }
+    },
+    {
+        "model_name": "openai/text-embedding-ada-002",
+        "litellm_params": {
+            "model": "text-embedding-ada-002",
+            "custom_llm_provider": "openai",
+            "api_key": os.environ.get("OPENAI_API_KEY"),
+            "api_base": os.environ.get("OPENAI_API_BASE"),
+        }
+    },
+    
+     # OpenAI Image Generation Models
+    {
+        "model_name": "openai/DALL·E 2",
+        "litellm_params": {
+            "model": "dall-e-2",
+            "custom_llm_provider": "openai",
+            "api_key": os.environ.get("OPENAI_API_KEY"),
+            "api_base": os.environ.get("OPENAI_API_BASE"),
+        }
+    },
+    {
+        "model_name": "openai/DALL·E 3",
+        "litellm_params": {
+            "model": "dall-e-3",
+            "custom_llm_provider": "openai",
+            "api_key": os.environ.get("OPENAI_API_KEY"),
+            "api_base": os.environ.get("OPENAI_API_BASE"),
+        }
+    },
 
     # Anthropic models (e.g., Claude)
     {
@@ -103,7 +152,99 @@ default_models = [
             "api_key": os.environ.get("ANTHROPIC_API_KEY"),
             "api_base": os.environ.get("ANTHROPIC_API_BASE"),
         }
-    }
+    },
+    
+    # Voyage AI Embedding Models
+    {
+        "model_name": "voyage/voyage-3-large",
+        "litellm_params": {
+            "model": "voyage-3-large",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_TEXT_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/voyage-3",
+        "litellm_params": {
+            "model": "voyage-3",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_TEXT_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/voyage-3-lite",
+        "litellm_params": {
+            "model": "voyage-3-lite",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_TEXT_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/voyage-code-3",
+        "litellm_params": {
+            "model": "voyage-code-3",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_TEXT_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/voyage-finance-2",
+        "litellm_params": {
+            "model": "voyage-finance-2",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_TEXT_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/voyage-law-2",
+        "litellm_params": {
+            "model": "voyage-law-2",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_TEXT_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/voyage-code-2",
+        "litellm_params": {
+            "model": "voyage-code-2",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_TEXT_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/voyage-multimodal-3",
+        "litellm_params": {
+            "model": "voyage-multimodal-3",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_MULTIMODAL_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/rerank-2",
+        "litellm_params": {
+            "model": "rerank-2",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_RERANK_API_BASE"),
+        }
+    },
+    {
+        "model_name": "voyage/rerank-2-lite",
+        "litellm_params": {
+            "model": "rerank-2-lite",
+            "custom_llm_provider": "voyage",
+            "api_key": os.environ.get("VOYAGEAI_API_KEY"),
+            "api_base": os.environ.get("VOYAGEAI_RERANK_API_BASE"),
+        }
+    },
 ]
 
 async def initialize_defaults(prisma_client: Optional[PrismaClient]):
